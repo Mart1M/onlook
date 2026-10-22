@@ -1,10 +1,13 @@
+import type { CodesandboxProviderOptions } from './providers/codesandbox';
 import { CodeProvider } from './providers';
-import { CodesandboxProvider, type CodesandboxProviderOptions } from './providers/codesandbox';
-import { NodeFsProvider, type NodeFsProviderOptions } from './providers/nodefs';
+import { CodesandboxProvider } from './providers/codesandbox';
+
 export * from './providers';
 export { CodesandboxProvider } from './providers/codesandbox';
-export { NodeFsProvider } from './providers/nodefs';
 export * from './types';
+
+// `NodeFsProvider` is server-only (Node built-ins) and this entry point is bundled into the
+// browser, so it is not exported here. Import it from '@onlook/code-provider/src/providers/nodefs'.
 
 export interface CreateClientOptions {
     providerOptions: ProviderInstanceOptions;
@@ -25,20 +28,15 @@ export async function createCodeProviderClient(
 
 export async function getStaticCodeProvider(
     codeProvider: CodeProvider,
-): Promise<typeof CodesandboxProvider | typeof NodeFsProvider> {
+): Promise<typeof CodesandboxProvider> {
     if (codeProvider === CodeProvider.CodeSandbox) {
         return CodesandboxProvider;
-    }
-
-    if (codeProvider === CodeProvider.NodeFs) {
-        return NodeFsProvider;
     }
     throw new Error(`Unimplemented code provider: ${codeProvider}`);
 }
 
 export interface ProviderInstanceOptions {
     codesandbox?: CodesandboxProviderOptions;
-    nodefs?: NodeFsProviderOptions;
 }
 
 function newProviderInstance(codeProvider: CodeProvider, providerOptions: ProviderInstanceOptions) {
@@ -47,13 +45,6 @@ function newProviderInstance(codeProvider: CodeProvider, providerOptions: Provid
             throw new Error('Codesandbox provider options are required.');
         }
         return new CodesandboxProvider(providerOptions.codesandbox);
-    }
-
-    if (codeProvider === CodeProvider.NodeFs) {
-        if (!providerOptions.nodefs) {
-            throw new Error('NodeFs provider options are required.');
-        }
-        return new NodeFsProvider(providerOptions.nodefs);
     }
 
     throw new Error(`Unimplemented code provider: ${codeProvider}`);
