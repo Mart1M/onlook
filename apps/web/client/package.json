@@ -54,6 +54,7 @@
     "@onlook/stripe": "*",
     "@onlook/ui": "*",
     "@onlook/utility": "*",
+    "@onlook/vite-plugin": "*",
     "@opentelemetry/api-logs": "0.57.2",
     "@opentelemetry/instrumentation": "0.57.2",
     "@opentelemetry/sdk-logs": "0.57.2",

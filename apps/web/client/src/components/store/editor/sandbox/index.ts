@@ -9,7 +9,12 @@ import type { EditorEngine } from '../engine';
 import type { ErrorManager } from '../error';
 import { GitManager } from '../git';
 import { detectRouterConfig } from '../pages/helper';
-import { copyPreloadScriptToPublic, getLayoutPath as detectLayoutPath } from './preload-script';
+import {
+    copyPreloadScriptToPublic,
+    detectBridgeTarget,
+    ensureVitePreloadBridge,
+    getLayoutPath as detectLayoutPath,
+} from './preload-script';
 import { SessionManager } from './session';
 import { ViteRuntime, type StartViteRuntimeInput } from './vite-runtime';
 
@@ -93,29 +98,37 @@ export class SandboxManager {
 
     private async ensurePreloadScriptExists(): Promise<void> {
         try {
-            if (this.preloadScriptState !== PreloadScriptState.NOT_INJECTED
-            ) {
+            if (this.preloadScriptState !== PreloadScriptState.NOT_INJECTED) {
                 return;
             }
 
-            this.preloadScriptState = PreloadScriptState.LOADING
+            this.preloadScriptState = PreloadScriptState.LOADING;
 
             if (!this.session.provider) {
                 throw new Error('No provider available for preload script injection');
             }
 
+            const { target } = await detectBridgeTarget(this.session.provider);
+
+            // Vite (SID-26): inject via transformIndexHtml wrapper — no layout rewrite.
+            if (target === 'vite') {
+                await ensureVitePreloadBridge(this.session.provider);
+                this.preloadScriptState = PreloadScriptState.INJECTED;
+                return;
+            }
+
+            // Next.js: keep existing root-layout Script injection.
             const routerConfig = await this.getRouterConfig();
             if (!routerConfig) {
                 throw new Error('No router config found for preload script injection');
             }
 
             await copyPreloadScriptToPublic(this.session.provider, routerConfig);
-            this.preloadScriptState = PreloadScriptState.INJECTED
+            this.preloadScriptState = PreloadScriptState.INJECTED;
         } catch (error) {
             console.error('[SandboxManager] Failed to ensure preload script exists:', error);
-            // Mark as injected to prevent blocking frames indefinitely
             // Frames will handle the missing preload script gracefully
-            this.preloadScriptState = PreloadScriptState.NOT_INJECTED
+            this.preloadScriptState = PreloadScriptState.NOT_INJECTED;
         }
     }
 
