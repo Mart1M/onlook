@@ -7,6 +7,7 @@ Le dossier racine `docs/` est l’application Fumadocs (site de documentation pr
 | ID | Titre | Statut |
 |----|-------|--------|
 | [001](./001-reutilisation-moteur-onlook-plan-fork.md) | Réutilisation du moteur Onlook et plan de fork | Accepted |
+| [002](./002-base-fork-et-sync-upstream.md) | Base de fork et politique de synchronisation upstream | Accepted |
 
 ## Convention
 
