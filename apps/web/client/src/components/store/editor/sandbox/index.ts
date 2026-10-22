@@ -11,6 +11,7 @@ import { GitManager } from '../git';
 import { detectRouterConfig } from '../pages/helper';
 import { copyPreloadScriptToPublic, getLayoutPath as detectLayoutPath } from './preload-script';
 import { SessionManager } from './session';
+import { ViteRuntime, type StartViteRuntimeInput } from './vite-runtime';
 
 export enum PreloadScriptState {
     NOT_INJECTED = 'not-injected',
@@ -20,6 +21,7 @@ export enum PreloadScriptState {
 export class SandboxManager {
     readonly session: SessionManager;
     readonly gitManager: GitManager;
+    readonly viteRuntime: ViteRuntime;
     private providerReactionDisposer?: () => void;
     private sync: CodeProviderSync | null = null;
     preloadScriptState: PreloadScriptState = PreloadScriptState.NOT_INJECTED
@@ -33,6 +35,7 @@ export class SandboxManager {
     ) {
         this.session = new SessionManager(this.branch, this.errorManager);
         this.gitManager = new GitManager(this);
+        this.viteRuntime = new ViteRuntime(this.session);
         makeAutoObservable(this);
     }
 
@@ -187,6 +190,47 @@ export class SandboxManager {
         return this.fs.moveFile(oldPath, newPath);
     }
 
+    /**
+     * Start a local Vite/Next `dev` task via the SID-24 NodeFs bridge, detect the
+     * listening port, and point this branch's canvas frames at `http://localhost:<port>`.
+     */
+    async startLocalVite(
+        input: Omit<StartViteRuntimeInput, 'projectId'> & { projectId?: string },
+    ): Promise<{ url: string; port: number }> {
+        const projectId = input.projectId ?? this.branch.projectId;
+        if (!projectId) {
+            throw new Error('projectId is required to start a local Vite runtime');
+        }
+        const result = await this.viteRuntime.start({ ...input, projectId });
+        await this.applyPreviewUrlToBranchFrames(result.url);
+        return result;
+    }
+
+    async applyPreviewUrlToBranchFrames(previewOrigin: string): Promise<void> {
+        const origin = previewOrigin.replace(/\/$/, '');
+        const frames = this.editorEngine.frames
+            .getAll()
+            .filter((frameData) => frameData.frame.branchId === this.branch.id);
+
+        await Promise.all(
+            frames.map(async (frameData) => {
+                let pathname = '/';
+                try {
+                    pathname = new URL(frameData.frame.url).pathname || '/';
+                } catch {
+                    pathname = '/';
+                }
+                const nextUrl = pathname === '/' ? `${origin}/` : `${origin}${pathname}`;
+                if (frameData.frame.url === nextUrl) {
+                    return;
+                }
+                await this.editorEngine.frames.updateAndSaveToStorage(frameData.frame.id, {
+                    url: nextUrl,
+                });
+            }),
+        );
+    }
+
     // Download the code as a zip
     async downloadFiles(
         projectName?: string,
@@ -219,6 +263,7 @@ export class SandboxManager {
         this.sync?.release();
         this.sync = null;
         this.preloadScriptState = PreloadScriptState.NOT_INJECTED
+        void this.viteRuntime.dispose();
         this.session.clear();
     }
 }
