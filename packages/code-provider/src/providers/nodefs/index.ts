@@ -395,11 +395,11 @@ export class NodeFsProvider extends Provider {
         return { changedFiles };
     }
 
-    async setup(input: SetupInput): Promise<SetupOutput> {
+    async setup(_input: SetupInput): Promise<SetupOutput> {
         return {};
     }
 
-    async createSession(input: CreateSessionInput): Promise<CreateSessionOutput> {
+    async createSession(_input: CreateSessionInput): Promise<CreateSessionOutput> {
         // Local provider: there are no credentials to hand to the frontend.
         return {};
     }
@@ -494,24 +494,23 @@ export class NodeFsFileWatcher extends ProviderFileWatcher {
         this.watcher.on('error', (error) => console.error('NodeFs watcher error:', error));
     }
 
-    private async dispatch(eventType: string, abs: string, relative: string): Promise<void> {
-        let type: WatchEvent['type'] = 'change';
-        if (eventType === 'rename') {
-            // Some runtimes (Bun on macOS) report creates, writes and deletes all as 'rename', so
-            // the type is derived from existence plus the paths seen so far. A file that predates
-            // the watcher is reported as 'add' on its first event.
-            const exists = await fs
-                .access(abs)
-                .then(() => true)
-                .catch(() => false);
-            if (!exists) {
-                type = 'remove';
-                this.seen.delete(relative);
-            } else {
-                type = this.seen.has(relative) ? 'change' : 'add';
-                this.seen.add(relative);
-            }
+    private async dispatch(_eventType: string, abs: string, relative: string): Promise<void> {
+        // Bun/Node report creates, writes and deletes inconsistently as `rename` or `change`
+        // depending on the platform (e.g. Bun on macOS tends to use `rename`; Linux often uses
+        // `change` for creates/writes). Derive the semantic type from existence plus the paths
+        // seen so far. A file that predates the watcher is reported as `add` on its first event.
+        const exists = await fs
+            .access(abs)
+            .then(() => true)
+            .catch(() => false);
+        let type: WatchEvent['type'];
+        if (!exists) {
+            type = 'remove';
+            this.seen.delete(relative);
+        } else if (this.seen.has(relative)) {
+            type = 'change';
         } else {
+            type = 'add';
             this.seen.add(relative);
         }
         for (const callback of this.callbacks) {
