@@ -1,3 +1,5 @@
+import { isPublishEnabled } from '@/config/features';
+import { assertPublishEnabled } from '@/server/api/features';
 import { customDomainVerification, projectCustomDomains, ProjectCustomDomainStatus, toDomainInfoFromPublished, userProjects } from '@onlook/db';
 import { VerificationRequestStatus } from '@onlook/models';
 import { TRPCError } from '@trpc/server';
@@ -10,6 +12,9 @@ export const customRouter = createTRPCRouter({
     get: protectedProcedure.input(z.object({
         projectId: z.string(),
     })).query(async ({ ctx, input }) => {
+        if (!isPublishEnabled()) {
+            return null;
+        }
         await verifyProjectAccess(ctx.db, ctx.user.id, input.projectId);
         const customDomain = await ctx.db.query.projectCustomDomains.findFirst({
             where: eq(projectCustomDomains.projectId, input.projectId),
@@ -20,6 +25,7 @@ export const customRouter = createTRPCRouter({
         domain: z.string(),
         projectId: z.string(),
     })).mutation(async ({ ctx, input }): Promise<boolean> => {
+        assertPublishEnabled();
         await verifyProjectAccess(ctx.db, ctx.user.id, input.projectId);
         try {
             await ctx.db.transaction(async (tx) => {
@@ -48,6 +54,9 @@ export const customRouter = createTRPCRouter({
         }
     }),
     getOwnedDomains: protectedProcedure.query(async ({ ctx }): Promise<string[]> => {
+        if (!isPublishEnabled()) {
+            return [];
+        }
         const user = ctx.user;
         if (!user) {
             throw new TRPCError({

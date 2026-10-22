@@ -1,9 +1,13 @@
+import { isBillingEnabled } from '@/config/features';
 import { env } from '@/env';
 import { createStripeClient } from '@onlook/stripe';
 import Stripe from 'stripe';
 import { handleSubscriptionCreated, handleSubscriptionDeleted, handleSubscriptionUpdated } from './subscription';
 
 export async function POST(request: Request) {
+    if (!isBillingEnabled()) {
+        return new Response('Billing is disabled', { status: 404 });
+    }
     const stripe = createStripeClient(env.STRIPE_SECRET_KEY)
     const endpointSecret = env.STRIPE_WEBHOOK_SECRET
 

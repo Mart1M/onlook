@@ -5,6 +5,7 @@ import { useEditorEngine } from '@/components/store/editor';
 import { useStateManager } from '@/components/store/state';
 import { CurrentUserAvatar } from '@/components/ui/avatar-dropdown';
 import { SettingsTabValue } from '@/components/ui/settings-modal/helpers';
+import { isPublishEnabled } from '@/config/features';
 import { transKeys } from '@/i18n/keys';
 import { Button } from '@onlook/ui/button';
 import { HotkeyLabel } from '@onlook/ui/hotkey-label';
@@ -114,7 +115,7 @@ export const TopBar = observer(() => {
                         {t(transKeys.editor.toolbar.versionHistory)}
                     </TooltipContent>
                 </Tooltip>
-                <PublishButton />
+                {isPublishEnabled() && <PublishButton />}
             </div>
         </div>
     );

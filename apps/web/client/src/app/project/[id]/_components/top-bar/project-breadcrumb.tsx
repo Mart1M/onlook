@@ -1,5 +1,6 @@
 import { useEditorEngine } from '@/components/store/editor';
 import { useStateManager } from '@/components/store/state';
+import { isBillingEnabled } from '@/config/features';
 import { transKeys } from '@/i18n/keys';
 import { api } from '@/trpc/react';
 import { ProductType } from '@onlook/stripe';
@@ -29,8 +30,12 @@ export const ProjectBreadcrumb = observer(() => {
     const stateManager = useStateManager();
     const posthog = usePostHog();
     const { data: project } = api.project.get.useQuery({ projectId: editorEngine.projectId });
-    const { data: subscription } = api.subscription.get.useQuery();
-    const isPro = subscription?.product.type === ProductType.PRO;
+    const billingEnabled = isBillingEnabled();
+    const { data: subscription } = api.subscription.get.useQuery(undefined, {
+        enabled: billingEnabled,
+    });
+    // Without billing, Pro paywalls are off — unlock local fork features (e.g. download).
+    const isPro = !billingEnabled || subscription?.product.type === ProductType.PRO;
     const t = useTranslations();
     const closeTimeoutRef = useRef<Timer | null>(null);
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);

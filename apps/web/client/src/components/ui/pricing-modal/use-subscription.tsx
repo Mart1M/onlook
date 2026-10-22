@@ -1,4 +1,5 @@
 import { useStateManager } from "@/components/store/state";
+import { isBillingEnabled } from "@/config/features";
 import { api } from "@/trpc/react";
 import { ProductType, ScheduledSubscriptionAction } from "@onlook/stripe";
 import { toast } from "@onlook/ui/sonner";
@@ -6,8 +7,10 @@ import { useEffect, useState } from "react";
 
 export const useSubscription = () => {
     const state = useStateManager();
+    const billingEnabled = isBillingEnabled();
     const { data: subscription, refetch: refetchSubscription } = api.subscription.get.useQuery(undefined, {
-        refetchInterval: state.isSubscriptionModalOpen ? 3000 : false,
+        enabled: billingEnabled,
+        refetchInterval: billingEnabled && state.isSubscriptionModalOpen ? 3000 : false,
     });
     const [isCheckingSubscription, setIsCheckingSubscription] = useState(false);
     const isPro = subscription?.product.type === ProductType.PRO;
