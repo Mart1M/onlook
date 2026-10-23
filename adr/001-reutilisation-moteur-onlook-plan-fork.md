@@ -81,7 +81,7 @@ Ordre imposé avant les épics Runtime et Sync moteurs :
 | **C1** | Runtime Vite local (port, logs, HMR, URL canvas) | SID-25 | B1, idéalement B2 |
 | **C2** | Bridge/preload Vite (sans layout Next imposé au projet utilisateur) | SID-26 | Soft C1 |
 
-**Politique git (détail SID-20)** : fork long terme à partir de ≥ `423e2e92` ; rebases/cherry-picks ciblés pour correctifs sécurité amont ; dossiers « proches d’upstream » = `packages/{parser,penpal,code-provider,ui,utility,models}` et stores éditeur ; dossiers « fork-owned » = runtime local, mapping, suppression SaaS.
+**Politique git** : détail dans [ADR-002](./002-base-fork-et-sync-upstream.md) (SID-20) — fork long terme à partir de ≥ `423e2e92` ; cherry-picks / sync sélective (pas de rebase total) ; dossiers « proches d’upstream » = `packages/{parser,penpal,code-provider,ui,utility,models}` et stores éditeur ; dossiers « fork-owned » = runtime local, mapping, suppression SaaS.
 
 ## Conséquences
 
