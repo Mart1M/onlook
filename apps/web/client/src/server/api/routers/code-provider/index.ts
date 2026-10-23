@@ -1,6 +1,8 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
+import type { RemoteSessionEvent } from '@onlook/code-provider';
+
 import { createTRPCRouter, protectedProcedure } from '../../trpc';
 import { verifyProjectAccess } from '../project/helper';
 import {
@@ -13,10 +15,8 @@ import {
     destroyProcessHandle,
     getCodeProviderSession,
     getProcessHandle,
-    getWatchHandle,
     iterateEmitter,
     stopWatchHandle,
-    type WatchEvent,
 } from '../../../code-provider/session-store';
 import { inspectLocalProject, listLocalProjects } from '../../../code-provider/local-projects';
 
@@ -263,18 +263,21 @@ export const codeProviderRouter = createTRPCRouter({
             return { ok: true as const };
         }),
 
-    watchEvents: protectedProcedure
-        .input(sessionIdInput.extend({ watcherId: z.string().uuid() }))
-        .subscription(async function* ({ input, ctx, signal }) {
-            const session = await requireSession(input.sessionId, ctx.user.id);
-            let handle;
-            try {
-                handle = getWatchHandle(session, input.watcherId);
-            } catch (error) {
-                asTrpcError(error);
-            }
-            yield* iterateEmitter<WatchEvent>(handle.emitter, 'event', signal);
-        }),
+    /**
+     * The only streaming procedure: every watcher and process of the session shares this one
+     * connection. Browsers allow six HTTP/1.1 connections per host, so a stream per watcher or
+     * process starved every other request, including page navigation.
+     */
+    sessionEvents: protectedProcedure.input(sessionIdInput).subscription(async function* ({
+        input,
+        ctx,
+        signal,
+    }) {
+        const session = await requireSession(input.sessionId, ctx.user.id);
+        yield* iterateEmitter<RemoteSessionEvent>(session.events, 'event', signal, [
+            { kind: 'ready' },
+        ]);
+    }),
 
     // —— Terminal / task / background ————————————————————————————————————————
 
@@ -372,21 +375,5 @@ export const codeProviderRouter = createTRPCRouter({
             const session = await requireSession(input.sessionId, ctx.user.id);
             await destroyProcessHandle(session, input.handleId);
             return { ok: true as const };
-        }),
-
-    processOutput: protectedProcedure
-        .input(sessionIdInput.extend({ handleId: z.string().uuid() }))
-        .subscription(async function* ({ input, ctx, signal }) {
-            const session = await requireSession(input.sessionId, ctx.user.id);
-            let handle;
-            try {
-                handle = getProcessHandle(session, input.handleId);
-            } catch (error) {
-                asTrpcError(error);
-            }
-            if (handle.buffer) {
-                yield handle.buffer;
-            }
-            yield* iterateEmitter<string>(handle.emitter, 'data', signal);
         }),
 });

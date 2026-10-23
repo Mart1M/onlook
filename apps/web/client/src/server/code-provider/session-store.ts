@@ -12,6 +12,7 @@ import type {
     ProviderFileWatcher,
     ProviderTask,
     ProviderTerminal,
+    RemoteSessionEvent,
     WatchEvent,
 } from '@onlook/code-provider';
 
@@ -24,12 +25,10 @@ interface ProcessHandle {
     background?: ProviderBackgroundCommand;
     /** Buffered output so late subscribers catch up. */
     buffer: string;
-    emitter: EventEmitter;
 }
 
 interface WatchHandle {
     watcher: ProviderFileWatcher;
-    emitter: EventEmitter;
 }
 
 export interface CodeProviderSession {
@@ -41,6 +40,8 @@ export interface CodeProviderSession {
     createdAt: number;
     processes: Map<string, ProcessHandle>;
     watchers: Map<string, WatchHandle>;
+    /** Single outlet for everything the session streams; see {@link RemoteSessionEvent}. */
+    events: EventEmitter;
 }
 
 const sessions = new Map<string, CodeProviderSession>();
@@ -102,6 +103,7 @@ export async function createCodeProviderSession(input: {
         createdAt: Date.now(),
         processes: new Map(),
         watchers: new Map(),
+        events: new EventEmitter(),
     };
     sessions.set(session.id, session);
     return session;
@@ -119,14 +121,13 @@ export async function destroyCodeProviderSession(sessionId: string, userId: stri
     const session = getCodeProviderSession(sessionId, userId);
     for (const watch of session.watchers.values()) {
         await watch.watcher.stop().catch(() => {});
-        watch.emitter.removeAllListeners();
     }
     session.watchers.clear();
     for (const handle of session.processes.values()) {
         await stopProcess(handle).catch(() => {});
-        handle.emitter.removeAllListeners();
     }
     session.processes.clear();
+    session.events.removeAllListeners();
     await session.provider.destroy().catch(() => {});
     sessions.delete(sessionId);
 }
@@ -141,13 +142,19 @@ async function stopProcess(handle: ProcessHandle): Promise<void> {
     }
 }
 
+function emitSessionEvent(session: CodeProviderSession, event: RemoteSessionEvent): void {
+    session.events.emit('event', event);
+}
+
 function attachOutput(
+    session: CodeProviderSession,
+    handleId: string,
     handle: ProcessHandle,
     onOutput: (cb: (data: string) => void) => () => void,
 ): void {
     onOutput((data) => {
         handle.buffer = (handle.buffer + data).slice(-100_000);
-        handle.emitter.emit('data', data);
+        emitSessionEvent(session, { kind: 'output', handleId, data });
     });
 }
 
@@ -160,17 +167,15 @@ export async function createWatchHandle(
     },
 ): Promise<string> {
     const watcherId = randomUUID();
-    const emitter = new EventEmitter();
-    emitter.setMaxListeners(50);
 
     const { watcher } = await session.provider.watchFiles({
         args,
         onFileChange: async (event) => {
-            emitter.emit('event', event);
+            emitSessionEvent(session, { kind: 'watch', watcherId, event });
         },
     });
 
-    session.watchers.set(watcherId, { watcher, emitter });
+    session.watchers.set(watcherId, { watcher });
     return watcherId;
 }
 
@@ -183,16 +188,7 @@ export async function stopWatchHandle(
         return;
     }
     await handle.watcher.stop().catch(() => {});
-    handle.emitter.removeAllListeners();
     session.watchers.delete(watcherId);
-}
-
-export function getWatchHandle(session: CodeProviderSession, watcherId: string): WatchHandle {
-    const handle = session.watchers.get(watcherId);
-    if (!handle) {
-        throw new Error(`Watcher ${watcherId} not found`);
-    }
-    return handle;
 }
 
 export async function createTerminalHandle(session: CodeProviderSession): Promise<{
@@ -206,10 +202,8 @@ export async function createTerminalHandle(session: CodeProviderSession): Promis
         kind: 'terminal',
         terminal,
         buffer: '',
-        emitter: new EventEmitter(),
     };
-    handle.emitter.setMaxListeners(50);
-    attachOutput(handle, (cb) => terminal.onOutput(cb));
+    attachOutput(session, handleId, handle, (cb) => terminal.onOutput(cb));
     session.processes.set(handleId, handle);
     return { handleId, id: terminal.id, name: terminal.name };
 }
@@ -224,10 +218,8 @@ export async function createTaskHandle(
         kind: 'task',
         task,
         buffer: '',
-        emitter: new EventEmitter(),
     };
-    handle.emitter.setMaxListeners(50);
-    attachOutput(handle, (cb) => task.onOutput(cb));
+    attachOutput(session, handleId, handle, (cb) => task.onOutput(cb));
     session.processes.set(handleId, handle);
     return { handleId, id: task.id, name: task.name, command: task.command };
 }
@@ -244,10 +236,8 @@ export async function createBackgroundHandle(
         kind: 'background',
         background: bg,
         buffer: '',
-        emitter: new EventEmitter(),
     };
-    handle.emitter.setMaxListeners(50);
-    attachOutput(handle, (cb) => bg.onOutput(cb));
+    attachOutput(session, handleId, handle, (cb) => bg.onOutput(cb));
     session.processes.set(handleId, handle);
     return { handleId, command: bg.command };
 }
@@ -269,15 +259,19 @@ export async function destroyProcessHandle(
         return;
     }
     await stopProcess(handle).catch(() => {});
-    handle.emitter.removeAllListeners();
     session.processes.delete(handleId);
 }
 
-/** Async iterator over EventEmitter events until `signal` aborts. */
+/**
+ * Async iterator over EventEmitter events until `signal` aborts.
+ * `initial` items are yielded first, queued once the listener is attached, so an item such as a
+ * `ready` marker can promise that nothing emitted after it is missed.
+ */
 export async function* iterateEmitter<T>(
     emitter: EventEmitter,
     eventName: string,
     signal?: AbortSignal,
+    initial: readonly T[] = [],
 ): AsyncGenerator<T> {
     const queue: T[] = [];
     let wake: (() => void) | null = null;
@@ -293,6 +287,7 @@ export async function* iterateEmitter<T>(
     };
 
     emitter.on(eventName, onData);
+    queue.push(...initial);
     signal?.addEventListener('abort', onAbort);
 
     try {
