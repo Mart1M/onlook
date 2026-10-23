@@ -74,10 +74,18 @@ export const env = createEnv({
         NEXT_PUBLIC_POSTHOG_HOST: z.string().optional(),
         NEXT_PUBLIC_GLEAP_API_KEY: z.string().optional(),
         NEXT_PUBLIC_FEATURE_COLLABORATION: z.coerce.boolean().default(false),
+        // These flags are parsed from the strings 'true' / 'false' on purpose: z.coerce.boolean()
+        // turns any non-empty string, including 'false', into true, which would enable them.
         /** Stripe / subscription / usage limits UI. Off by default for the local fork. */
-        NEXT_PUBLIC_FEATURE_BILLING: z.coerce.boolean().default(false),
+        NEXT_PUBLIC_FEATURE_BILLING: z
+            .enum(['true', 'false'])
+            .default('false')
+            .transform((value) => value === 'true'),
         /** Freestyle publish, domains, growth script. Off by default for the local fork. */
-        NEXT_PUBLIC_FEATURE_PUBLISH: z.coerce.boolean().default(false),
+        NEXT_PUBLIC_FEATURE_PUBLISH: z
+            .enum(['true', 'false'])
+            .default('false')
+            .transform((value) => value === 'true'),
         NEXT_PUBLIC_HOSTING_DOMAIN: z.string().optional(),
         NEXT_PUBLIC_RB2B_ID: z.string().optional(),
     },

@@ -20,6 +20,12 @@ export default function AuthRedirect() {
 
     useEffect(() => {
         const handleRedirect = async () => {
+            // Wait for both subscription queries to complete. This must come before the return URL
+            // is read: it is removed on read, so a re-run of the effect would not find it again.
+            if (billingEnabled && (subscriptionLoading || legacyLoading)) {
+                return;
+            }
+
             const returnUrl = await localforage.getItem<string>(LocalForageKeys.RETURN_URL);
             await localforage.removeItem(LocalForageKeys.RETURN_URL);
 
@@ -27,11 +33,6 @@ export default function AuthRedirect() {
             if (!billingEnabled) {
                 const sanitizedUrl = sanitizeReturnUrl(returnUrl);
                 router.replace(sanitizedUrl);
-                return;
-            }
-
-            // Wait for both subscription queries to complete
-            if (subscriptionLoading || legacyLoading) {
                 return;
             }
 
