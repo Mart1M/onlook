@@ -1,12 +1,22 @@
+import { isBillingEnabled } from '@/config/features';
 import { createClient as createTRPCClient } from '@/trpc/request-server';
 import { createClient as createSupabaseClient } from '@/utils/supabase/request-server';
 import { UsageType, type Usage } from '@onlook/models';
 import { type NextRequest } from 'next/server';
 
+const UNLIMITED: Usage = {
+    period: 'month',
+    usageCount: 0,
+    limitCount: Number.MAX_SAFE_INTEGER,
+};
+
 export const checkMessageLimit = async (req: NextRequest): Promise<{
     exceeded: boolean;
     usage: Usage;
 }> => {
+    if (!isBillingEnabled()) {
+        return { exceeded: false, usage: UNLIMITED };
+    }
     const { api } = await createTRPCClient(req);
     const usage = await api.usage.get();
 
@@ -44,6 +54,9 @@ export const incrementUsage = async (req: NextRequest, traceId?: string): Promis
     usageRecordId: string | undefined,
     rateLimitId: string | undefined,
 } | null> => {
+    if (!isBillingEnabled()) {
+        return null;
+    }
     try {
         const user = await getSupabaseUser(req);
         if (!user) {

@@ -1,4 +1,6 @@
+import { isPublishEnabled } from '@/config/features';
 import { env } from '@/env';
+import { assertPublishEnabled } from '@/server/api/features';
 import { previewDomains, toDomainInfoFromPreview } from '@onlook/db';
 import { getValidSubdomain } from '@onlook/utility';
 import { TRPCError } from '@trpc/server';
@@ -11,6 +13,9 @@ export const previewRouter = createTRPCRouter({
     get: protectedProcedure.input(z.object({
         projectId: z.string(),
     })).query(async ({ ctx, input }) => {
+        if (!isPublishEnabled()) {
+            return null;
+        }
         await verifyProjectAccess(ctx.db, ctx.user.id, input.projectId);
         const preview = await ctx.db.query.previewDomains.findFirst({
             where: eq(previewDomains.projectId, input.projectId),
@@ -20,6 +25,7 @@ export const previewRouter = createTRPCRouter({
     create: protectedProcedure.input(z.object({
         projectId: z.string(),
     })).mutation(async ({ ctx, input }) => {
+        assertPublishEnabled();
         await verifyProjectAccess(ctx.db, ctx.user.id, input.projectId);
         // Check if the domain is already taken by another project
         // This should never happen, but just in case

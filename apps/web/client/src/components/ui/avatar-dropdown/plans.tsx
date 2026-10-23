@@ -1,6 +1,7 @@
 'use client';
 
 import { useStateManager } from '@/components/store/state';
+import { isBillingEnabled } from '@/config/features';
 import { api } from '@/trpc/react';
 import { FREE_PRODUCT_CONFIG, ProductType, ScheduledSubscriptionAction } from '@onlook/stripe';
 import { Button } from '@onlook/ui/button';
@@ -12,8 +13,13 @@ import { useEffect } from 'react';
 
 export const UsageSection = observer(({ open }: { open: boolean }) => {
     const state = useStateManager();
-    const { data: subscription, isLoading: subscriptionLoading } = api.subscription.get.useQuery();
-    const { data: usageData, refetch: refetchUsage, isLoading: usageLoading } = api.usage.get.useQuery();
+    const billingEnabled = isBillingEnabled();
+    const { data: subscription, isLoading: subscriptionLoading } = api.subscription.get.useQuery(undefined, {
+        enabled: billingEnabled,
+    });
+    const { data: usageData, refetch: refetchUsage, isLoading: usageLoading } = api.usage.get.useQuery(undefined, {
+        enabled: billingEnabled,
+    });
 
     const debouncedRefetchUsage = debounce(refetchUsage, 1000, { leading: true, trailing: false });
     useEffect(() => {

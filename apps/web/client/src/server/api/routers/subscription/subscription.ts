@@ -1,3 +1,5 @@
+import { isBillingEnabled } from '@/config/features';
+import { assertBillingEnabled } from '@/server/api/features';
 import { Routes } from '@/utils/constants';
 import { legacySubscriptions, prices, subscriptions, fromDbSubscription, users } from '@onlook/db';
 import { createBillingPortalSession, createCheckoutSession, createCustomer, isTierUpgrade, PriceKey, releaseSubscriptionSchedule, SubscriptionStatus, updateSubscription, updateSubscriptionNextPeriod } from '@onlook/stripe';
@@ -8,6 +10,9 @@ import { createTRPCRouter, protectedProcedure } from '../../trpc';
 
 export const subscriptionRouter = createTRPCRouter({
     getLegacySubscriptions: protectedProcedure.query(async ({ ctx }) => {
+        if (!isBillingEnabled()) {
+            return null;
+        }
         const user = ctx.user;
         const subscription = await ctx.db.query.legacySubscriptions.findFirst({
             where: and(
@@ -18,6 +23,9 @@ export const subscriptionRouter = createTRPCRouter({
         return subscription ?? null;
     }),
     get: protectedProcedure.query(async ({ ctx }) => {
+        if (!isBillingEnabled()) {
+            return null;
+        }
         const user = ctx.user;
         const subscription = await ctx.db.query.subscriptions.findFirst({
             where: and(
@@ -48,6 +56,7 @@ export const subscriptionRouter = createTRPCRouter({
     getPriceId: protectedProcedure.input(z.object({
         priceKey: z.nativeEnum(PriceKey),
     })).mutation(async ({ input, ctx }) => {
+        assertBillingEnabled();
         const price = await ctx.db.query.prices.findFirst({
             where: eq(prices.key, input.priceKey),
         });
@@ -61,6 +70,7 @@ export const subscriptionRouter = createTRPCRouter({
     checkout: protectedProcedure.input(z.object({
         priceId: z.string(),
     })).mutation(async ({ ctx, input }) => {
+        assertBillingEnabled();
         const originUrl = (await headers()).get('origin');
         const user = ctx.user;
         const userData = await ctx.db.query.users.findFirst({
@@ -102,6 +112,7 @@ export const subscriptionRouter = createTRPCRouter({
         return session;
     }),
     manageSubscription: protectedProcedure.mutation(async ({ ctx }) => {
+        assertBillingEnabled();
         const user = ctx.user;
         const subscription = await ctx.db.query.subscriptions.findFirst({
             where: and(
@@ -128,6 +139,7 @@ export const subscriptionRouter = createTRPCRouter({
         stripeSubscriptionItemId: z.string(),
         stripePriceId: z.string(),
     })).mutation(async ({ input, ctx }) => {
+        assertBillingEnabled();
         const { stripeSubscriptionId, stripeSubscriptionItemId, stripePriceId } = input;
         const subscription = await ctx.db.query.subscriptions.findFirst({
             where: and(
@@ -194,6 +206,7 @@ export const subscriptionRouter = createTRPCRouter({
     releaseSubscriptionSchedule: protectedProcedure.input(z.object({
         subscriptionScheduleId: z.string(),
     })).mutation(async ({ input, ctx }) => {
+        assertBillingEnabled();
         // The caller must own the subscription that carries this schedule — else
         // anyone could release another customer's scheduled plan change and force
         // their subscription back to ACTIVE.

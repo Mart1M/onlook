@@ -1,6 +1,7 @@
 'use client';
 
 import { useStateManager } from '@/components/store/state';
+import { isBillingEnabled } from '@/config/features';
 import { api } from '@/trpc/react';
 import { Routes } from '@/utils/constants';
 import { createClient } from '@/utils/supabase/client';
@@ -96,8 +97,12 @@ export const CurrentUserAvatar = ({ className }: { className?: string }) => {
                     </div>
                 </div>
                 <DropdownMenuSeparator />
-                <UsageSection open={open} />
-                <DropdownMenuSeparator />
+                {isBillingEnabled() && (
+                    <>
+                        <UsageSection open={open} />
+                        <DropdownMenuSeparator />
+                    </>
+                )}
                 <div className="p-2">
                     {BUTTONS.map((button) => {
                         const IconComponent = button.icon;

@@ -1,3 +1,4 @@
+import { isPublishEnabled } from '@/config/features';
 import { deployments, deploymentUpdateSchema } from '@onlook/db';
 import {
     DeploymentStatus,
@@ -6,6 +7,7 @@ import {
 import { TRPCError } from '@trpc/server';
 import { and, desc, eq, or } from 'drizzle-orm';
 import { z } from "zod";
+import { assertPublishEnabled } from '../../features';
 import { createTRPCRouter, protectedProcedure } from "../../trpc";
 import { verifyDeploymentAccess, verifyProjectAccess } from '../project/helper';
 import { updateDeployment } from './helpers';
@@ -16,6 +18,9 @@ export const deploymentRouter = createTRPCRouter({
         projectId: z.string(),
         type: z.nativeEnum(DeploymentType),
     })).query(async ({ ctx, input }) => {
+        if (!isPublishEnabled()) {
+            return null;
+        }
         const { projectId, type } = input;
         await verifyProjectAccess(ctx.db, ctx.user.id, projectId);
         const deployment = await ctx.db.query.deployments.findFirst({
@@ -28,6 +33,7 @@ export const deploymentRouter = createTRPCRouter({
         return deployment ?? null;
     }),
     update: protectedProcedure.input(deploymentUpdateSchema).mutation(async ({ ctx, input }) => {
+        assertPublishEnabled();
         if (!input.id) {
             throw new TRPCError({ code: 'BAD_REQUEST', message: 'Deployment id is required' });
         }
@@ -42,6 +48,7 @@ export const deploymentRouter = createTRPCRouter({
         buildFlags: z.string().optional(),
         envVars: z.record(z.string(), z.string()).optional(),
     })).mutation(async ({ ctx, input }) => {
+        assertPublishEnabled();
         const {
             projectId,
             type,
@@ -88,6 +95,7 @@ export const deploymentRouter = createTRPCRouter({
     run: protectedProcedure.input(z.object({
         deploymentId: z.string(),
     })).mutation(async ({ ctx, input }): Promise<void> => {
+        assertPublishEnabled();
         const { deploymentId } = input;
         await verifyDeploymentAccess(ctx.db, ctx.user.id, deploymentId);
         const existingDeployment = await ctx.db.query.deployments.findFirst({
@@ -143,6 +151,7 @@ export const deploymentRouter = createTRPCRouter({
     cancel: protectedProcedure.input(z.object({
         deploymentId: z.string(),
     })).mutation(async ({ ctx, input }) => {
+        assertPublishEnabled();
         const { deploymentId } = input;
         await verifyDeploymentAccess(ctx.db, ctx.user.id, deploymentId);
         const deployment = await ctx.db.query.deployments.findFirst({
