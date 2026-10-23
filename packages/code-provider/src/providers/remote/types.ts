@@ -51,6 +51,18 @@ export interface RemoteSessionResult {
 }
 
 /**
+ * Everything a session streams to the browser, over a single connection.
+ *
+ * Browsers cap HTTP/1.1 at six connections per host. One stream per watcher or process used to
+ * exhaust that cap, which left every other request to the server queued behind them.
+ * `ready` is sent once the server is listening, so nothing emitted after it is missed.
+ */
+export type RemoteSessionEvent =
+    | { kind: 'ready' }
+    | { kind: 'watch'; watcherId: string; event: WatchEvent }
+    | { kind: 'output'; handleId: string; data: string };
+
+/**
  * Transport injected by the host app (tRPC, fetch, …).
  * Keeps `@onlook/code-provider` free of Next/tRPC imports so it stays browser-safe.
  */

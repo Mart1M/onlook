@@ -1,17 +1,117 @@
 'use client';
 
-import type { RemoteCodeProviderRpc, WatchEvent } from '@onlook/code-provider';
+import type { RemoteCodeProviderRpc } from '@onlook/code-provider';
 
 import { api } from '@/trpc/client';
+import { SessionEventHub } from './session-event-hub';
+
+/** How long to wait for the server to start listening before giving up on a session. */
+const STREAM_READY_TIMEOUT_MS = 15_000;
+
+interface SessionStream {
+    hub: SessionEventHub;
+    close: () => void;
+}
+
+// One stream per session. Browsers allow six HTTP/1.1 connections per host, so a stream per
+// watcher or process left every other request waiting behind them.
+const streams = new Map<string, SessionStream>();
+
+function toError(error: unknown): Error {
+    return error instanceof Error ? error : new Error(String(error));
+}
+
+function closeSessionStream(sessionId: string): void {
+    const stream = streams.get(sessionId);
+    if (!stream) {
+        return;
+    }
+    streams.delete(sessionId);
+    stream.close();
+    stream.hub.clear();
+}
+
+/** Opens the session's event stream and resolves once the server is listening. */
+function openSessionStream(sessionId: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+        const hub = new SessionEventHub();
+        let ready = false;
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+
+        const subscription = api.codeProvider.sessionEvents.subscribe(
+            { sessionId },
+            {
+                onData: (event) => {
+                    if (event.kind === 'ready') {
+                        ready = true;
+                        clearTimeout(timeout);
+                        resolve();
+                        return;
+                    }
+                    hub.dispatch(event);
+                },
+                onError: (error) => {
+                    const failure = toError(error);
+                    if (!ready) {
+                        clearTimeout(timeout);
+                        closeSessionStream(sessionId);
+                        reject(failure);
+                        return;
+                    }
+                    hub.fail(failure);
+                },
+            },
+        );
+        streams.set(sessionId, { hub, close: () => subscription.unsubscribe() });
+
+        timeout = setTimeout(() => {
+            if (!ready) {
+                closeSessionStream(sessionId);
+                reject(new Error('Timed out waiting for the session event stream.'));
+            }
+        }, STREAM_READY_TIMEOUT_MS);
+    });
+}
+
+/** Registers a listener on the session's shared stream; the returned function removes it. */
+function listen(
+    sessionId: string,
+    onError: ((error: Error) => void) | undefined,
+    register: (hub: SessionEventHub) => () => void,
+): () => void {
+    const stream = streams.get(sessionId);
+    if (!stream) {
+        onError?.(new Error(`No event stream for session ${sessionId}`));
+        return () => {};
+    }
+    const offError = onError ? stream.hub.onError(onError) : () => {};
+    const off = register(stream.hub);
+    return () => {
+        off();
+        offError();
+    };
+}
 
 /**
  * tRPC adapter that implements {@link RemoteCodeProviderRpc} for the browser.
- * Unary calls use mutations/queries; watch/process streams use SSE subscriptions.
+ * Unary calls use mutations/queries; watch and process output share one SSE stream per session.
  */
 export function createTrpcRemoteCodeProviderRpc(): RemoteCodeProviderRpc {
     return {
-        createSession: (input) => api.codeProvider.createSession.mutate(input),
+        createSession: async (input) => {
+            const session = await api.codeProvider.createSession.mutate(input);
+            try {
+                await openSessionStream(session.sessionId);
+            } catch (error) {
+                await api.codeProvider.destroySession
+                    .mutate({ sessionId: session.sessionId })
+                    .catch(() => {});
+                throw error;
+            }
+            return session;
+        },
         destroySession: async (input) => {
+            closeSessionStream(input.sessionId);
             await api.codeProvider.destroySession.mutate(input);
         },
         writeFile: (input) =>
@@ -54,15 +154,8 @@ export function createTrpcRemoteCodeProviderRpc(): RemoteCodeProviderRpc {
         stopWatch: async (input) => {
             await api.codeProvider.stopWatch.mutate(input);
         },
-        subscribeWatch: (input, onEvent, onError) => {
-            const sub = api.codeProvider.watchEvents.subscribe(input, {
-                onData: (event) => onEvent(event as WatchEvent),
-                onError: (err) => onError?.(err instanceof Error ? err : new Error(String(err))),
-            });
-            return () => {
-                void sub.unsubscribe();
-            };
-        },
+        subscribeWatch: (input, onEvent, onError) =>
+            listen(input.sessionId, onError, (hub) => hub.onWatch(input.watcherId, onEvent)),
         createTerminal: (input) => api.codeProvider.createTerminal.mutate(input),
         getTask: (input) => api.codeProvider.getTask.mutate(input),
         runBackgroundCommand: (input) => api.codeProvider.runBackgroundCommand.mutate(input),
@@ -79,14 +172,7 @@ export function createTrpcRemoteCodeProviderRpc(): RemoteCodeProviderRpc {
         processStop: async (input) => {
             await api.codeProvider.processStop.mutate(input);
         },
-        subscribeOutput: (input, onData, onError) => {
-            const sub = api.codeProvider.processOutput.subscribe(input, {
-                onData: (chunk) => onData(chunk),
-                onError: (err) => onError?.(err instanceof Error ? err : new Error(String(err))),
-            });
-            return () => {
-                void sub.unsubscribe();
-            };
-        },
+        subscribeOutput: (input, onData, onError) =>
+            listen(input.sessionId, onError, (hub) => hub.onOutput(input.handleId, onData)),
     };
 }

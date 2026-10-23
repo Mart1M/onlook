@@ -6,7 +6,11 @@ import { RemoteProvider, type RemoteProviderOptions } from './providers/remote';
 export * from './providers';
 export { CodesandboxProvider } from './providers/codesandbox';
 export { RemoteProvider } from './providers/remote';
-export type { RemoteCodeProviderRpc, RemoteProviderOptions } from './providers/remote';
+export type {
+    RemoteCodeProviderRpc,
+    RemoteProviderOptions,
+    RemoteSessionEvent,
+} from './providers/remote';
 export * from './types';
 
 // `NodeFsProvider` is server-only (Node built-ins) and this entry point is bundled into the
