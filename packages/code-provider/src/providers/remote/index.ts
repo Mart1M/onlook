@@ -52,7 +52,7 @@ import {
 } from '../../types';
 import type { RemoteCodeProviderRpc } from './types';
 
-export type { RemoteCodeProviderRpc } from './types';
+export type { RemoteCodeProviderRpc, RemoteSessionEvent } from './types';
 
 /**
  * Browser-side {@link Provider} that forwards every call to a server-held
