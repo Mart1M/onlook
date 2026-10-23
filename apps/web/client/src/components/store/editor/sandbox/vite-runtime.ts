@@ -6,14 +6,26 @@ import {
     detectProjectFromPackageJson,
     isErrorMessage,
     isSuccessMessage,
+    packageManagerRun,
     parsePortFromDevServerLog,
     resolveDevServerPort,
     tasksFromDetection,
     type ProjectDetection,
 } from '@onlook/utility';
+import { viteDevCommandWithOnlookConfig } from '@onlook/vite-plugin';
 import { makeAutoObservable } from 'mobx';
 
+import { ensureVitePreloadBridge } from './preload-script';
 import type { SessionManager, StartNodeFsOptions } from './session';
+
+/** Prefer Onlook's Vite config wrapper so the preload bridge injects without layout edits. */
+function tasksForDetection(detection: ProjectDetection): Record<string, string> | null {
+    if (detection.framework.kind === 'vite' && detection.defaultTask) {
+        const runPrefix = packageManagerRun(detection.packageManager, 'dev').replace(/\s+dev$/, '');
+        return { [detection.defaultTask]: viteDevCommandWithOnlookConfig(runPrefix) };
+    }
+    return tasksFromDetection(detection);
+}
 
 export type ViteRuntimeStatus = 'idle' | 'starting' | 'ready' | 'error' | 'stopped';
 
@@ -91,7 +103,7 @@ export class ViteRuntime {
             const bootstrapDetection = packageJson
                 ? detectProjectFromPackageJson(packageJson, { lockfileNames })
                 : null;
-            let tasks = bootstrapDetection ? tasksFromDetection(bootstrapDetection) : null;
+            let tasks = bootstrapDetection ? tasksForDetection(bootstrapDetection) : null;
 
             if (!tasks) {
                 // Need a session to read package.json — start with a temporary echo task then replace.
@@ -115,9 +127,13 @@ export class ViteRuntime {
                 packageJson = await this.readPackageJson(provider);
             }
             this.detection = detectProjectFromPackageJson(packageJson, { lockfileNames });
-            const detectedTasks = tasksFromDetection(this.detection);
+            const detectedTasks = tasksForDetection(this.detection);
             if (!detectedTasks || !this.detection.defaultTask) {
                 throw new Error('No `dev` script found in package.json');
+            }
+
+            if (this.detection.framework.kind === 'vite') {
+                await ensureVitePreloadBridge(this.requireProvider());
             }
 
             // Rebuild the session with the correct package-manager command when the bootstrap differed.
@@ -128,6 +144,9 @@ export class ViteRuntime {
                     ...nodeFsOptions,
                     tasks: detectedTasks,
                 });
+                if (this.detection.framework.kind === 'vite') {
+                    await ensureVitePreloadBridge(this.requireProvider());
+                }
             }
 
             const { task } = await this.requireProvider().getTask({
