@@ -8,7 +8,7 @@ import { TopBar } from '../_components/top-bar';
 
 const Page = () => {
     const router = useRouter();
-    const handleCardClick = (type: 'local' | 'github') => {
+    const handleCardClick = (type: 'local' | 'github' | 'workspace') => {
         router.push(`/projects/import/${type}`);
     };
     const backgroundUrl = useGetBackground('create');
@@ -39,6 +39,25 @@ const Page = () => {
                             <CardTitle className="text-title3">Import a Local Project</CardTitle>
                             <CardDescription className="text-sm text-balance">
                                 Select a directory from your computer to start working with your project in Onlook.
+                            </CardDescription>
+                        </div>
+                    </CardHeader>
+                </Card>
+                <Card
+                    className={`w-full h-64 cursor-pointer transition-all duration-200 bg-background/80 backdrop-blur-xl hover:shadow-lg hover:scale-[1.02] border-[0.5px] border-foreground-tertiary/50`}
+                    onClick={() => handleCardClick('workspace')}
+                    tabIndex={0}
+                    role="button"
+                    aria-label="Open workspace project"
+                >
+                    <CardHeader className="flex flex-col justify-between h-full">
+                        <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center select-none">
+                            <Icons.Directory className="w-6 h-6 text-primary" />
+                        </div>
+                        <div className="space-y-2">
+                            <CardTitle className="text-title3">Open a Workspace Project</CardTitle>
+                            <CardDescription className="text-sm text-balance">
+                                Run a project from your workspace folder in place, with your own dev server. Nothing is uploaded.
                             </CardDescription>
                         </div>
                     </CardHeader>

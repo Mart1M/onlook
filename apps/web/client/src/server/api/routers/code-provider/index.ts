@@ -18,6 +18,7 @@ import {
     iterateEmitter,
     stopWatchHandle,
 } from '../../../code-provider/session-store';
+import { inspectLocalProject, listLocalProjects } from '../../../code-provider/local-projects';
 
 const sessionIdInput = z.object({
     sessionId: z.string().uuid(),
@@ -49,6 +50,22 @@ const fileContentSchema = z.union([z.string(), z.instanceof(Uint8Array)]);
  * (enforced by NodeFsProvider).
  */
 export const codeProviderRouter = createTRPCRouter({
+    /**
+     * Folders of ONLOOK_WORKSPACE_ROOT that look like projects. The workspace is the host's own
+     * project directory and is only configured for local use, so it is not scoped per user.
+     */
+    listLocalProjects: protectedProcedure.query(async () => listLocalProjects()),
+
+    inspectLocalProject: protectedProcedure
+        .input(z.object({ rootDir: z.string().min(1) }))
+        .query(async ({ input }) => {
+            try {
+                return await inspectLocalProject(input.rootDir);
+            } catch (error) {
+                asTrpcError(error);
+            }
+        }),
+
     createSession: protectedProcedure
         .input(
             z.object({

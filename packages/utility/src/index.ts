@@ -13,6 +13,7 @@ export * from './frame';
 export * from './id';
 export * from './image';
 export * from './initials';
+export * from './local-sandbox';
 export * from './math';
 export * from './name';
 export * from './null';
