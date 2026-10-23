@@ -30,13 +30,9 @@ function getProvider({
                 },
             },
         });
-    } else {
-        return createCodeProviderClient(CodeProvider.NodeFs, {
-            providerOptions: {
-                nodefs: {},
-            },
-        });
     }
+    // NodeFs needs a rootDir and lives in a server-only module, so it is not wired through here yet.
+    throw new Error(`Unsupported sandbox provider: ${provider}`);
 }
 
 export const sandboxRouter = createTRPCRouter({
