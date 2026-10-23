@@ -2,6 +2,7 @@ import {
     DeploymentType
 } from '@onlook/models';
 import { z } from "zod";
+import { assertPublishEnabled } from '../../features';
 import { createTRPCRouter, protectedProcedure } from "../../trpc";
 import { verifyProjectAccess } from '../project/helper';
 import { deploymentRouter } from './deployment';
@@ -13,6 +14,7 @@ export const publishRouter = createTRPCRouter({
         type: z.enum(DeploymentType),
         projectId: z.string(),
     })).mutation(async ({ ctx, input }) => {
+        assertPublishEnabled();
         const { projectId, type } = input;
         const userId = ctx.user.id;
         await verifyProjectAccess(ctx.db, userId, projectId);

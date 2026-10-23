@@ -1,5 +1,6 @@
 'use client';
 
+import { isBillingEnabled } from '@/config/features';
 import { LocalForageKeys, Routes } from '@/utils/constants';
 import { sanitizeReturnUrl } from '@/utils/url';
 import localforage from 'localforage';
@@ -9,18 +10,31 @@ import { api } from '@/trpc/react';
 
 export default function AuthRedirect() {
     const router = useRouter();
-    const { data: subscription, isLoading: subscriptionLoading } = api.subscription.get.useQuery();
-    const { data: legacySubscription, isLoading: legacyLoading } = api.subscription.getLegacySubscriptions.useQuery();
+    const billingEnabled = isBillingEnabled();
+    const { data: subscription, isLoading: subscriptionLoading } = api.subscription.get.useQuery(undefined, {
+        enabled: billingEnabled,
+    });
+    const { data: legacySubscription, isLoading: legacyLoading } = api.subscription.getLegacySubscriptions.useQuery(undefined, {
+        enabled: billingEnabled,
+    });
 
     useEffect(() => {
         const handleRedirect = async () => {
-            // Wait for both subscription queries to complete
-            if (subscriptionLoading || legacyLoading) {
+            // Wait for both subscription queries to complete. This must come before the return URL
+            // is read: it is removed on read, so a re-run of the effect would not find it again.
+            if (billingEnabled && (subscriptionLoading || legacyLoading)) {
                 return;
             }
 
             const returnUrl = await localforage.getItem<string>(LocalForageKeys.RETURN_URL);
             await localforage.removeItem(LocalForageKeys.RETURN_URL);
+
+            // Fork builds without billing skip the SaaS paywall and go straight through.
+            if (!billingEnabled) {
+                const sanitizedUrl = sanitizeReturnUrl(returnUrl);
+                router.replace(sanitizedUrl);
+                return;
+            }
 
             // If user has no active subscription or legacy subscription, redirect to demo-only page
             if (!subscription && !legacySubscription) {
@@ -33,7 +47,7 @@ export default function AuthRedirect() {
             router.replace(sanitizedUrl);
         };
         handleRedirect();
-    }, [router, subscription, legacySubscription, subscriptionLoading, legacyLoading]);
+    }, [router, billingEnabled, subscription, legacySubscription, subscriptionLoading, legacyLoading]);
 
     return (
         <div className="flex h-screen w-screen items-center justify-center">

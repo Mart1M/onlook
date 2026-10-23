@@ -138,9 +138,12 @@ Actionable rules for repo agents—keep diffs minimal, safe, token‑efficient.
 
 ### Notes
 
+- Quality baseline (what already fails vs regressions): see `QUALITY_BASELINE.md`
+  (Bun **1.3.1**, `bun run typecheck` / `bun test` / `bun run lint`).
 - Unit tests can be run with `bun test`
 - Run type checking with `bun run typecheck`
 - Apply database updates to local dev with `bun run db:push`
 - Refrain from running the dev server
 - DO NOT run `db:gen`. This is reserved for the maintainer.
 - DO NOT use any type unless necessary
+- Use Bun **1.3.1** only; do not commit accidental `bun.lock` rewrites

@@ -1,4 +1,5 @@
 import { useStateManager } from '@/components/store/state';
+import { isBillingEnabled } from '@/config/features';
 import { Button } from '@onlook/ui/button';
 import { Icons } from '@onlook/ui/icons';
 import { Separator } from '@onlook/ui/separator';
@@ -19,11 +20,13 @@ export const NonProjectSettingsModal = observer(() => {
             icon: <Icons.Person className="mr-2 h-4 w-4" />,
             component: <PreferencesTab />,
         },
-        {
-            label: SettingsTabValue.SUBSCRIPTION,
-            icon: <Icons.CreditCard className="mr-2 h-4 w-4" />,
-            component: <SubscriptionTab />,
-        },
+        ...(isBillingEnabled()
+            ? [{
+                label: SettingsTabValue.SUBSCRIPTION,
+                icon: <Icons.CreditCard className="mr-2 h-4 w-4" />,
+                component: <SubscriptionTab />,
+            } satisfies SettingTab]
+            : []),
     ]
 
     return (

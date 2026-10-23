@@ -81,6 +81,18 @@ export const env = createEnv({
         NEXT_PUBLIC_POSTHOG_HOST: z.string().optional(),
         NEXT_PUBLIC_GLEAP_API_KEY: z.string().optional(),
         NEXT_PUBLIC_FEATURE_COLLABORATION: z.coerce.boolean().default(false),
+        // These flags are parsed from the strings 'true' / 'false' on purpose: z.coerce.boolean()
+        // turns any non-empty string, including 'false', into true, which would enable them.
+        /** Stripe / subscription / usage limits UI. Off by default for the local fork. */
+        NEXT_PUBLIC_FEATURE_BILLING: z
+            .enum(['true', 'false'])
+            .default('false')
+            .transform((value) => value === 'true'),
+        /** Freestyle publish, domains, growth script. Off by default for the local fork. */
+        NEXT_PUBLIC_FEATURE_PUBLISH: z
+            .enum(['true', 'false'])
+            .default('false')
+            .transform((value) => value === 'true'),
         NEXT_PUBLIC_HOSTING_DOMAIN: z.string().optional(),
         NEXT_PUBLIC_RB2B_ID: z.string().optional(),
     },
@@ -94,6 +106,8 @@ export const env = createEnv({
         CSB_API_KEY: process.env.CSB_API_KEY,
         RESEND_API_KEY: process.env.RESEND_API_KEY,
         NEXT_PUBLIC_FEATURE_COLLABORATION: process.env.NEXT_PUBLIC_FEATURE_COLLABORATION,
+        NEXT_PUBLIC_FEATURE_BILLING: process.env.NEXT_PUBLIC_FEATURE_BILLING,
+        NEXT_PUBLIC_FEATURE_PUBLISH: process.env.NEXT_PUBLIC_FEATURE_PUBLISH,
 
         // Supabase
         SUPABASE_DATABASE_URL: process.env.SUPABASE_DATABASE_URL,

@@ -1,3 +1,4 @@
+import { isPublishEnabled } from '@/config/features';
 import { previewDomains, projectCustomDomains, toDomainInfoFromPreview, toDomainInfoFromPublished } from '@onlook/db';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
@@ -14,6 +15,9 @@ export const domainRouter = createTRPCRouter({
     getAll: protectedProcedure.input(z.object({
         projectId: z.string(),
     })).query(async ({ ctx, input }) => {
+        if (!isPublishEnabled()) {
+            return { preview: null, published: null };
+        }
         await verifyProjectAccess(ctx.db, ctx.user.id, input.projectId);
         const preview = await ctx.db.query.previewDomains.findFirst({
             where: eq(previewDomains.projectId, input.projectId),

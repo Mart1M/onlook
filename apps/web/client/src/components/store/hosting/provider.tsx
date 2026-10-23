@@ -1,6 +1,7 @@
 'use client';
 
 import { useEditorEngine } from '@/components/store/editor';
+import { isPublishEnabled } from '@/config/features';
 import { api } from '@/trpc/react';
 import { type Deployment } from '@onlook/db';
 import { DeploymentStatus, DeploymentType } from '@onlook/models';
@@ -39,6 +40,7 @@ interface HostingProviderProps {
 
 export const HostingProvider = ({ children }: HostingProviderProps) => {
     const editorEngine = useEditorEngine();
+    const publishEnabled = isPublishEnabled();
     const [subscriptionStates, setSubscriptionStates] = useState<Record<DeploymentType, boolean>>({
         [DeploymentType.PREVIEW]: false,
         [DeploymentType.CUSTOM]: false,
@@ -51,28 +53,32 @@ export const HostingProvider = ({ children }: HostingProviderProps) => {
         projectId: editorEngine.projectId,
         type: DeploymentType.PREVIEW,
     }, {
-        refetchInterval: subscriptionStates[DeploymentType.PREVIEW] ? 1000 : false,
+        enabled: publishEnabled,
+        refetchInterval: publishEnabled && subscriptionStates[DeploymentType.PREVIEW] ? 1000 : false,
     });
 
     const customQuery = api.publish.deployment.getByType.useQuery({
         projectId: editorEngine.projectId,
         type: DeploymentType.CUSTOM,
     }, {
-        refetchInterval: subscriptionStates[DeploymentType.CUSTOM] ? 1000 : false,
+        enabled: publishEnabled,
+        refetchInterval: publishEnabled && subscriptionStates[DeploymentType.CUSTOM] ? 1000 : false,
     });
 
     const unpublishPreviewQuery = api.publish.deployment.getByType.useQuery({
         projectId: editorEngine.projectId,
         type: DeploymentType.UNPUBLISH_PREVIEW,
     }, {
-        refetchInterval: subscriptionStates[DeploymentType.UNPUBLISH_PREVIEW] ? 1000 : false,
+        enabled: publishEnabled,
+        refetchInterval: publishEnabled && subscriptionStates[DeploymentType.UNPUBLISH_PREVIEW] ? 1000 : false,
     });
 
     const unpublishCustomQuery = api.publish.deployment.getByType.useQuery({
         projectId: editorEngine.projectId,
         type: DeploymentType.UNPUBLISH_CUSTOM,
     }, {
-        refetchInterval: subscriptionStates[DeploymentType.UNPUBLISH_CUSTOM] ? 1000 : false,
+        enabled: publishEnabled,
+        refetchInterval: publishEnabled && subscriptionStates[DeploymentType.UNPUBLISH_CUSTOM] ? 1000 : false,
     });
 
     // Mutations
@@ -118,6 +124,10 @@ export const HostingProvider = ({ children }: HostingProviderProps) => {
 
     // Publish function
     const publish = async (params: PublishParams): Promise<{ success: boolean } | null> => {
+        if (!publishEnabled) {
+            toast.error('Publish is disabled in this build');
+            return { success: false };
+        }
         let deployment: Deployment | null = null;
         try {
             setSubscriptionStates(prev => ({
@@ -163,6 +173,10 @@ export const HostingProvider = ({ children }: HostingProviderProps) => {
 
     // Unpublish function
     const unpublish = async (projectId: string, type: DeploymentType) => {
+        if (!publishEnabled) {
+            toast.error('Publish is disabled in this build');
+            return null;
+        }
         try {
             setSubscriptionStates(prev => ({
                 ...prev,

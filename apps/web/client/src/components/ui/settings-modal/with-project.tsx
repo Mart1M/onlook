@@ -1,5 +1,6 @@
 import { useEditorEngine } from '@/components/store/editor';
 import { useStateManager } from '@/components/store/state';
+import { isBillingEnabled, isPublishEnabled } from '@/config/features';
 import type { PageNode } from '@onlook/models';
 import { Button } from '@onlook/ui/button';
 import { Icons } from '@onlook/ui/icons';
@@ -69,11 +70,13 @@ export const SettingsModalWithProjects = observer(() => {
             icon: <Icons.Person className="mr-2 h-4 w-4" />,
             component: <PreferencesTab />,
         },
-        {
-            label: SettingsTabValue.SUBSCRIPTION,
-            icon: <Icons.CreditCard className="mr-2 h-4 w-4" />,
-            component: <SubscriptionTab />,
-        },
+        ...(isBillingEnabled()
+            ? [{
+                label: SettingsTabValue.SUBSCRIPTION,
+                icon: <Icons.CreditCard className="mr-2 h-4 w-4" />,
+                component: <SubscriptionTab />,
+            } satisfies SettingTab]
+            : []),
     ];
 
     const projectTabs: SettingTab[] = [
@@ -82,11 +85,13 @@ export const SettingsModalWithProjects = observer(() => {
             icon: <Icons.File className="mr-2 h-4 w-4" />,
             component: <SiteTab />,
         },
-        {
-            label: SettingsTabValue.DOMAIN,
-            icon: <Icons.Globe className="mr-2 h-4 w-4" />,
-            component: <DomainTab />,
-        },
+        ...(isPublishEnabled()
+            ? [{
+                label: SettingsTabValue.DOMAIN,
+                icon: <Icons.Globe className="mr-2 h-4 w-4" />,
+                component: <DomainTab />,
+            } satisfies SettingTab]
+            : []),
         {
             label: SettingsTabValue.PROJECT,
             icon: <Icons.Gear className="mr-2 h-4 w-4" />,

@@ -1,3 +1,5 @@
+import { isPublishEnabled } from '@/config/features';
+import { assertPublishEnabled } from '@/server/api/features';
 import { trackEvent } from '@/utils/analytics/server';
 import { customDomains, customDomainVerification, projectCustomDomains, type CustomDomainVerification } from '@onlook/db';
 import { VerificationRequestStatus } from '@onlook/models';
@@ -12,6 +14,9 @@ export const verificationRouter = createTRPCRouter({
     getActive: protectedProcedure.input(z.object({
         projectId: z.string(),
     })).query(async ({ ctx, input }): Promise<CustomDomainVerification | null> => {
+        if (!isPublishEnabled()) {
+            return null;
+        }
         await verifyProjectAccess(ctx.db, ctx.user.id, input.projectId);
         const verification = await ctx.db.query.customDomainVerification.findFirst({
             where: and(
@@ -31,6 +36,7 @@ export const verificationRouter = createTRPCRouter({
         domain: z.string(),
         projectId: z.string(),
     })).mutation(async ({ ctx, input }): Promise<CustomDomainVerification> => {
+        assertPublishEnabled();
         await verifyProjectAccess(ctx.db, ctx.user.id, input.projectId);
         const { customDomain, subdomain } = await getCustomDomain(ctx.db, input.domain);
         const existingVerification = await getVerification(ctx.db, input.projectId, customDomain.id);
@@ -43,6 +49,7 @@ export const verificationRouter = createTRPCRouter({
     remove: protectedProcedure.input(z.object({
         verificationId: z.string(),
     })).mutation(async ({ ctx, input }) => {
+        assertPublishEnabled();
         await verifyDomainVerificationAccess(ctx.db, ctx.user.id, input.verificationId);
         await ctx.db.update(customDomainVerification).set({
             status: VerificationRequestStatus.CANCELLED,
@@ -55,6 +62,7 @@ export const verificationRouter = createTRPCRouter({
         success: boolean;
         failureReason: string | null;
     }> => {
+        assertPublishEnabled();
         await verifyDomainVerificationAccess(ctx.db, ctx.user.id, input.verificationId);
         const verification = await ctx.db.query.customDomainVerification.findFirst({
             where: and(
@@ -116,6 +124,7 @@ export const verificationRouter = createTRPCRouter({
         success: boolean;
         failureReason: string | null;
     }> => {
+        assertPublishEnabled();
         const user = ctx.user;
         if (!user) {
             throw new TRPCError({

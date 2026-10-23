@@ -1,6 +1,7 @@
 'use client';
 
 import { useStateManager } from '@/components/store/state';
+import { isBillingEnabled } from '@/config/features';
 import { useGetBackground } from '@/hooks/use-get-background';
 import { transKeys } from '@/i18n/keys';
 import { ProductType, ScheduledSubscriptionAction } from '@onlook/stripe';
@@ -18,6 +19,10 @@ export const SubscriptionModal = observer(() => {
     const t = useTranslations();
     const backgroundUrl = useGetBackground('create');
     const { subscription } = useSubscription();
+
+    if (!isBillingEnabled()) {
+        return null;
+    }
 
     const getSubscriptionChangeMessage = () => {
         let message = '';

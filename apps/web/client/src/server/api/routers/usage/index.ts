@@ -1,3 +1,4 @@
+import { isBillingEnabled } from '@/config/features';
 import { rateLimits, subscriptions, usageRecords } from '@onlook/db';
 import { UsageType, type UsageResult } from '@onlook/models';
 import { FREE_PRODUCT_CONFIG, SubscriptionStatus } from '@onlook/stripe';
@@ -7,8 +8,16 @@ import type { PgTransaction } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
 import { createTRPCRouter, protectedProcedure } from '../../trpc';
 
+const UNLIMITED_USAGE: UsageResult = {
+    daily: { period: 'day', usageCount: 0, limitCount: Number.MAX_SAFE_INTEGER },
+    monthly: { period: 'month', usageCount: 0, limitCount: Number.MAX_SAFE_INTEGER },
+};
+
 export const usageRouter = createTRPCRouter({
     get: protectedProcedure.query(async ({ ctx }): Promise<UsageResult> => {
+        if (!isBillingEnabled()) {
+            return UNLIMITED_USAGE;
+        }
         const user = ctx.user;
         return ctx.db.transaction(async (tx) => {
             // Calculate date ranges
@@ -30,6 +39,9 @@ export const usageRouter = createTRPCRouter({
         type: z.enum(UsageType),
         traceId: z.string().optional(),
     })).mutation(async ({ ctx, input }) => {
+        if (!isBillingEnabled()) {
+            return { rateLimitId: undefined, usageRecordId: undefined };
+        }
         const user = ctx.user;
         // running a transaction helps with concurrency issues and ensures that
         // the usage is incremented atomically
@@ -87,6 +99,9 @@ export const usageRouter = createTRPCRouter({
         usageRecordId: z.string().optional(),
         rateLimitId: z.string().optional(),
     })).mutation(async ({ ctx, input }) => {
+        if (!isBillingEnabled()) {
+            return { rateLimitId: input.rateLimitId, usageRecordId: input.usageRecordId };
+        }
         return ctx.db.transaction(async (tx) => {
             if (input.rateLimitId) {
                 await tx.update(rateLimits).set({
