@@ -84,14 +84,14 @@ const MAX_BUFFERED_OUTPUT = 100_000;
 const MAX_COMMAND_OUTPUT = 10 * 1024 * 1024;
 
 function buildEnv(extra?: Record<string, string>): NodeJS.ProcessEnv {
-    const env: NodeJS.ProcessEnv = {};
+    const env: Record<string, string | undefined> = {};
     for (const key of INHERITED_ENV_KEYS) {
         const value = process.env[key];
         if (value !== undefined) {
             env[key] = value;
         }
     }
-    return { ...env, ...extra };
+    return { ...env, ...extra } as NodeJS.ProcessEnv;
 }
 
 function toPosix(p: string): string {

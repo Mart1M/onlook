@@ -3,19 +3,62 @@ import { CodeProvider, createCodeProviderClient, type Provider } from '@onlook/c
 import type { Branch } from '@onlook/models';
 import { makeAutoObservable } from 'mobx';
 import type { ErrorManager } from '../error';
+import { createTrpcRemoteCodeProviderRpc } from './remote-rpc';
 import { CLISessionImpl, CLISessionType, type CLISession, type TerminalSession } from './terminal';
+
+export type StartNodeFsOptions = {
+    projectId: string;
+    rootDir: string;
+    tasks?: Record<string, string>;
+    env?: Record<string, string>;
+};
 
 export class SessionManager {
     provider: Provider | null = null;
     isConnecting = false;
     terminalSessions = new Map<string, CLISession>();
     activeTerminalSessionId = 'cli';
+    /** When set, reconnect/restart use the local NodeFs bridge instead of CodeSandbox. */
+    private nodeFsOptions: StartNodeFsOptions | null = null;
 
     constructor(
         private readonly branch: Branch,
         private readonly errorManager: ErrorManager
     ) {
         makeAutoObservable(this);
+    }
+
+    /**
+     * Connect via server-side {@link NodeFsProvider} (SID-24 bridge).
+     * The browser holds a {@link RemoteProvider}; file/watch/terminal ops RPC to the server.
+     */
+    async startNodeFs(options: StartNodeFsOptions): Promise<void> {
+        if (this.isConnecting || this.provider) {
+            return;
+        }
+        this.isConnecting = true;
+        this.nodeFsOptions = options;
+        try {
+            const provider = await createCodeProviderClient(CodeProvider.NodeFs, {
+                providerOptions: {
+                    nodefs: {
+                        projectId: options.projectId,
+                        rootDir: options.rootDir,
+                        tasks: options.tasks,
+                        env: options.env,
+                        rpc: createTrpcRemoteCodeProviderRpc(),
+                    },
+                },
+            });
+            this.provider = provider;
+            await this.createTerminalSessions(provider);
+        } catch (error) {
+            this.provider = null;
+            this.nodeFsOptions = null;
+            this.isConnecting = false;
+            throw error;
+        }
+        this.isConnecting = false;
     }
 
     async start(sandboxId: string, userId?: string): Promise<void> {
@@ -27,6 +70,7 @@ export class SessionManager {
         }
 
         this.isConnecting = true;
+        this.nodeFsOptions = null;
 
         const attemptConnection = async () => {
             const provider = await createCodeProviderClient(CodeProvider.CodeSandbox, {
@@ -176,8 +220,13 @@ export class SessionManager {
         if (!this.provider) {
             return;
         }
+        const nodeFs = this.nodeFsOptions;
         await this.provider.destroy();
         this.provider = null;
+        if (nodeFs) {
+            await this.startNodeFs(nodeFs);
+            return;
+        }
         await this.start(sandboxId, userId);
     }
 
@@ -241,6 +290,7 @@ export class SessionManager {
             await this.provider.destroy();
         }
         this.provider = null;
+        this.nodeFsOptions = null;
         this.isConnecting = false;
         this.terminalSessions.clear();
     }

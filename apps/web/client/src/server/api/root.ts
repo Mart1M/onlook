@@ -16,6 +16,7 @@ import {
     userRouter,
     utilsRouter,
 } from './routers';
+import { codeProviderRouter } from './routers/code-provider';
 import { branchRouter } from './routers/project/branch';
 
 /**
@@ -25,6 +26,7 @@ import { branchRouter } from './routers/project/branch';
  */
 export const appRouter = createTRPCRouter({
     sandbox: sandboxRouter,
+    codeProvider: codeProviderRouter,
     user: userRouter,
     invitation: invitationRouter,
     project: projectRouter,

@@ -60,6 +60,13 @@ export const env = createEnv({
         GITHUB_APP_ID: z.string().optional(),
         GITHUB_APP_PRIVATE_KEY: z.string().optional(),
         GITHUB_APP_SLUG: z.string().optional(),
+
+        /**
+         * Absolute path that every NodeFs session rootDir must stay under (SID-24 code-provider
+         * bridge). Optional for the app as a whole, but local NodeFs sessions are refused while it
+         * is unset: the client chooses rootDir and sessions can run commands.
+         */
+        ONLOOK_WORKSPACE_ROOT: z.string().optional(),
     },
     /**
      * Specify your client-side environment variables schema here. This way you can ensure the app
@@ -167,6 +174,8 @@ export const env = createEnv({
         GITHUB_APP_ID: process.env.GITHUB_APP_ID,
         GITHUB_APP_PRIVATE_KEY: process.env.GITHUB_APP_PRIVATE_KEY,
         GITHUB_APP_SLUG: process.env.GITHUB_APP_SLUG,
+
+        ONLOOK_WORKSPACE_ROOT: process.env.ONLOOK_WORKSPACE_ROOT,
     },
     /**
      * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially
