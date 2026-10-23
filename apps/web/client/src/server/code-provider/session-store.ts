@@ -46,15 +46,21 @@ export interface CodeProviderSession {
 const sessions = new Map<string, CodeProviderSession>();
 
 /**
- * When set, every session rootDir must resolve under this directory (realpath).
- * Prevents opening arbitrary host paths even for authenticated users.
+ * Every session rootDir must resolve under this directory (realpath).
+ *
+ * Fails closed: rootDir is chosen by the client and a session can run commands, so without a
+ * configured boundary any project member could open an arbitrary directory on the host.
  */
-function workspaceRoot(): string | null {
+function workspaceRoot(): string {
     const raw = process.env.ONLOOK_WORKSPACE_ROOT;
-    return raw ? path.resolve(raw) : null;
+    if (!raw) {
+        throw new Error('ONLOOK_WORKSPACE_ROOT must be set to enable local NodeFs sessions.');
+    }
+    return path.resolve(raw);
 }
 
 export async function assertAllowedRootDir(rootDir: string): Promise<string> {
+    const allowed = workspaceRoot();
     if (!path.isAbsolute(rootDir)) {
         throw new Error('rootDir must be an absolute path.');
     }
@@ -64,13 +70,10 @@ export async function assertAllowedRootDir(rootDir: string): Promise<string> {
         throw new Error(`rootDir is not a directory: ${resolved}`);
     }
     const real = await fs.realpath(resolved);
-    const allowed = workspaceRoot();
-    if (allowed) {
-        const realAllowed = await fs.realpath(allowed).catch(() => path.resolve(allowed));
-        const relative = path.relative(realAllowed, real);
-        if (relative.startsWith('..') || path.isAbsolute(relative)) {
-            throw new Error('rootDir is outside ONLOOK_WORKSPACE_ROOT.');
-        }
+    const realAllowed = await fs.realpath(allowed).catch(() => allowed);
+    const relative = path.relative(realAllowed, real);
+    if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+        throw new Error('rootDir is outside ONLOOK_WORKSPACE_ROOT.');
     }
     return real;
 }

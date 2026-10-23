@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -13,11 +13,15 @@ import {
 
 let tmp: string;
 
+beforeEach(() => {
+    // Sessions are refused without a workspace boundary, so every test works inside one.
+    tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'nodefs-ws-')));
+    process.env.ONLOOK_WORKSPACE_ROOT = tmp;
+});
+
 afterEach(async () => {
     await __resetCodeProviderSessionsForTests();
-    if (tmp && fs.existsSync(tmp)) {
-        fs.rmSync(tmp, { recursive: true, force: true });
-    }
+    fs.rmSync(tmp, { recursive: true, force: true });
     delete process.env.ONLOOK_WORKSPACE_ROOT;
 });
 
@@ -27,27 +31,66 @@ describe('assertAllowedRootDir', () => {
     });
 
     test('rejects missing directories', async () => {
-        await expect(assertAllowedRootDir('/tmp/does-not-exist-nodefs-sid24')).rejects.toThrow(
+        await expect(assertAllowedRootDir(path.join(tmp, 'does-not-exist'))).rejects.toThrow(
             /not a directory/,
         );
     });
 
-    test('enforces ONLOOK_WORKSPACE_ROOT when set', async () => {
-        tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nodefs-ws-'));
+    test('refuses every rootDir while ONLOOK_WORKSPACE_ROOT is unset', async () => {
+        delete process.env.ONLOOK_WORKSPACE_ROOT;
+        const dir = path.join(tmp, 'project');
+        fs.mkdirSync(dir);
+
+        await expect(assertAllowedRootDir(dir)).rejects.toThrow(/ONLOOK_WORKSPACE_ROOT must be set/);
+        await expect(assertAllowedRootDir('/')).rejects.toThrow(/ONLOOK_WORKSPACE_ROOT must be set/);
+        await expect(
+            createCodeProviderSession({ userId: 'user-a', projectId: 'p', rootDir: dir }),
+        ).rejects.toThrow(/ONLOOK_WORKSPACE_ROOT must be set/);
+    });
+
+    test('enforces ONLOOK_WORKSPACE_ROOT', async () => {
         const allowed = path.join(tmp, 'allowed');
         const outside = path.join(tmp, 'outside');
         fs.mkdirSync(allowed);
         fs.mkdirSync(outside);
         process.env.ONLOOK_WORKSPACE_ROOT = allowed;
 
-        await expect(assertAllowedRootDir(outside)).rejects.toThrow(/ONLOOK_WORKSPACE_ROOT/);
+        await expect(assertAllowedRootDir(outside)).rejects.toThrow(/outside ONLOOK_WORKSPACE_ROOT/);
         await expect(assertAllowedRootDir(allowed)).resolves.toBe(fs.realpathSync(allowed));
+    });
+
+    test('rejects the filesystem root and a parent of the workspace', async () => {
+        const allowed = path.join(tmp, 'allowed');
+        fs.mkdirSync(allowed);
+        process.env.ONLOOK_WORKSPACE_ROOT = allowed;
+
+        await expect(assertAllowedRootDir('/')).rejects.toThrow(/outside ONLOOK_WORKSPACE_ROOT/);
+        await expect(assertAllowedRootDir(tmp)).rejects.toThrow(/outside ONLOOK_WORKSPACE_ROOT/);
+    });
+
+    test('rejects a symlink inside the workspace that points outside it', async () => {
+        const allowed = path.join(tmp, 'allowed');
+        const outside = path.join(tmp, 'outside');
+        fs.mkdirSync(allowed);
+        fs.mkdirSync(outside);
+        fs.symlinkSync(outside, path.join(allowed, 'link'));
+        process.env.ONLOOK_WORKSPACE_ROOT = allowed;
+
+        await expect(assertAllowedRootDir(path.join(allowed, 'link'))).rejects.toThrow(
+            /outside ONLOOK_WORKSPACE_ROOT/,
+        );
+    });
+
+    test('accepts a directory whose name merely starts with two dots', async () => {
+        const dotted = path.join(tmp, '..dotted');
+        fs.mkdirSync(dotted);
+
+        await expect(assertAllowedRootDir(dotted)).resolves.toBe(fs.realpathSync(dotted));
     });
 });
 
 describe('code provider sessions', () => {
     test('creates a session scoped to the user and rejects other users', async () => {
-        tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nodefs-sess-'));
         const root = path.join(tmp, 'project');
         fs.mkdirSync(root);
 
@@ -69,7 +112,6 @@ describe('code provider sessions', () => {
     });
 
     test('provider read/write stays inside the session root', async () => {
-        tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nodefs-rw-'));
         const root = path.join(tmp, 'project');
         fs.mkdirSync(root);
 

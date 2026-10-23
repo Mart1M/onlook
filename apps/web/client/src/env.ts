@@ -62,9 +62,9 @@ export const env = createEnv({
         GITHUB_APP_SLUG: z.string().optional(),
 
         /**
-         * Optional absolute path that every NodeFs session rootDir must stay under.
-         * Used by the SID-24 code-provider bridge. When unset, only project membership
-         * + NodeFs path confinement apply.
+         * Absolute path that every NodeFs session rootDir must stay under (SID-24 code-provider
+         * bridge). Optional for the app as a whole, but local NodeFs sessions are refused while it
+         * is unset: the client chooses rootDir and sessions can run commands.
          */
         ONLOOK_WORKSPACE_ROOT: z.string().optional(),
     },
