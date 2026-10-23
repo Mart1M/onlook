@@ -1,9 +1,11 @@
 import { CodeProviderSync } from '@/services/sync-engine/sync-engine';
+import { api } from '@/trpc/client';
 import type { Provider } from '@onlook/code-provider';
 import { EXCLUDED_SYNC_PATHS } from '@onlook/constants';
 import type { CodeFileSystem } from '@onlook/file-system';
 import { type FileEntry } from '@onlook/file-system';
 import type { Branch, RouterConfig } from '@onlook/models';
+import { rootDirFromLocalSandboxId } from '@onlook/utility';
 import { makeAutoObservable, reaction } from 'mobx';
 import type { EditorEngine } from '../engine';
 import type { ErrorManager } from '../error';
@@ -47,7 +49,13 @@ export class SandboxManager {
     async init() {
         // Start connection asynchronously (don't wait)
         if (!this.session.provider) {
-            this.session.start(this.branch.sandbox.id).catch(err => {
+            // A branch backed by a host folder runs through the local NodeFs runtime; any other
+            // branch is a hosted CodeSandbox session.
+            const localRootDir = rootDirFromLocalSandboxId(this.branch.sandbox.id);
+            const connection = localRootDir
+                ? this.startLocalProject(localRootDir)
+                : this.session.start(this.branch.sandbox.id);
+            connection.catch(err => {
                 console.error('[SandboxManager] Initial connection failed:', err);
                 // Don't throw - let reaction handle retries/reconnects
             });
@@ -68,6 +76,18 @@ export class SandboxManager {
             },
             { fireImmediately: true },
         );
+    }
+
+    /**
+     * Opens a branch whose sandbox id points at a folder: the server reads package.json (so the
+     * runtime starts with the right dev command straight away), then the dev server is started
+     * and the branch frames are pointed at it.
+     */
+    private async startLocalProject(rootDir: string): Promise<void> {
+        const { packageJson, lockfileNames } = await api.codeProvider.inspectLocalProject.query({
+            rootDir,
+        });
+        await this.startLocalVite({ rootDir, packageJson, lockfileNames });
     }
 
     async getRouterConfig(): Promise<RouterConfig | null> {
